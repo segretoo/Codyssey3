@@ -6,6 +6,7 @@ MAC(Multiply-Accumulate) 연산의 핵심 원리를 직접 구현한 Python 콘�
 ## 개발 환경
 
 - Python 3.8 이상
+- 실제 개발·실행 환경: Python 3.14.6 (Windows, Git Bash/MINGW64)
 - 외부 라이브러리 사용 금지 (NumPy, pandas 등 미사용)
 - 표준 라이브러리만 사용: `json`, `time`, `re`, `os`
 - 운영체제 무관 (표준 라이브러리만 사용하므로 Windows/macOS/Linux 어디서든 동일하게 동작)
