@@ -20,24 +20,40 @@ PERF_REPEATS = 10            # 성능 분석 반복 횟수
 
 
 # ------------------------------------------------------------------
-# 1. 데이터 구조 / 패턴 생성기 (보너스: 십자가·X 패턴 자동 생성)
+# 1. 데이터 구조: NxN 2차원 패턴/필터 저장 및 위치별 읽기/쓰기
 # ------------------------------------------------------------------
+def create_matrix(n, fill=0.0):
+    """N x N 크기의 2차원 배열을 생성한다 (최소 3,5,13,25 지원, N은 임의의 양의 정수)."""
+    return [[fill for _ in range(n)] for _ in range(n)]
+
+
+def set_value(matrix, row, col, value):
+    """특정 위치(row, col)에 값을 저장한다."""
+    matrix[row][col] = value
+
+
+def get_value(matrix, row, col):
+    """특정 위치(row, col)의 값을 읽어온다."""
+    return matrix[row][col]
+
+
+# ---- 패턴 생성기 (보너스: 십자가·X 패턴 자동 생성) ----
 def generate_cross(n):
-    """NxN 십자가(+) 패턴을 생성한다."""
-    mat = [[0.0 for _ in range(n)] for _ in range(n)]
+    """NxN 십자가(+) 패턴을 생성한다. set_value()로 위치별 값을 기록한다."""
+    mat = create_matrix(n)
     mid = n // 2
     for i in range(n):
-        mat[i][mid] = 1.0
-        mat[mid][i] = 1.0
+        set_value(mat, i, mid, 1.0)
+        set_value(mat, mid, i, 1.0)
     return mat
 
 
 def generate_x(n):
-    """NxN X 패턴을 생성한다."""
-    mat = [[0.0 for _ in range(n)] for _ in range(n)]
+    """NxN X 패턴을 생성한다. set_value()로 위치별 값을 기록한다."""
+    mat = create_matrix(n)
     for i in range(n):
-        mat[i][i] = 1.0
-        mat[i][n - 1 - i] = 1.0
+        set_value(mat, i, i, 1.0)
+        set_value(mat, i, n - 1 - i, 1.0)
     return mat
 
 
@@ -48,12 +64,13 @@ def mac_operation(pattern, filt):
     """
     입력 패턴과 필터를 위치별로 곱하고 모두 더한다.
     Multiply(곱하기) + Accumulate(누적 더하기) = MAC 연산
+    get_value()로 각 위치의 값을 읽어와 반복문으로 직접 계산한다(외부 라이브러리 미사용).
     """
     n = len(pattern)
     total = 0.0
     for i in range(n):
         for j in range(n):
-            total += pattern[i][j] * filt[i][j]
+            total += get_value(pattern, i, j) * get_value(filt, i, j)
     return total
 
 
@@ -64,16 +81,15 @@ def normalize_expected(raw_label):
     """
     data.json 의 expected 값을 표준 라벨로 정규화한다.
 
-    과제 설명서 기준: 't' -> Cross, 'x' -> X
-    다만 실제 data.json 파일을 확인한 결과 'expected' 값으로 't'가 아닌
-    '+' 가 사용되고 있다 (예: "expected": "+"). 이는 문서(스키마 설명)와
-    실데이터 간의 라벨 불일치 사례이므로, 십자가를 의미하는 '+' 도 Cross로
-    함께 인식하도록 정규화 규칙을 확장했다. (README '결과 리포트' 참고)
+    공식 규칙: expected 값 '+' -> Cross, 'x' -> X
+    (과제 자료 초기 버전에는 '+'가 't'로 잘못 표기되어 있었으나, 최신 요구사항
+    문서와 실제 data.json 모두 '+'를 사용함을 확인했다. 하위 호환을 위해
+    't'/'true'/'cross' 표기도 함께 Cross로 인식하도록 방어적으로 넓혀두었다.)
     """
     if raw_label is None:
         return None
     key = str(raw_label).strip().lower()
-    if key in ("t", "true", "cross", "+"):
+    if key in ("+", "t", "true", "cross"):
         return "Cross"
     if key == "x":
         return "X"
@@ -102,7 +118,7 @@ def read_matrix(label, size):
     """
     while True:
         print(f"\n{label} ({size}줄 입력, 공백 구분)")
-        rows = []
+        matrix = create_matrix(size)
         error_occurred = False
         for i in range(size):
             line = input(f"  {i + 1}행: ").strip()
@@ -114,19 +130,20 @@ def read_matrix(label, size):
                 break
 
             try:
-                row = [float(p) for p in parts]
+                values = [float(p) for p in parts]
             except ValueError:
                 print("입력 형식 오류: 숫자로 변환할 수 없는 값이 포함되어 있습니다. 다시 입력하세요.")
                 error_occurred = True
                 break
 
-            rows.append(row)
+            for j, value in enumerate(values):
+                set_value(matrix, i, j, value)
 
         if error_occurred:
             print("→ 처음부터 다시 입력해 주세요.")
             continue
 
-        return rows
+        return matrix
 
 
 def judge_scores(score_a, score_b):
@@ -200,11 +217,8 @@ def run_mode2():
     print("-" * 40)
     for key in sorted(filters.keys()):
         f = filters[key]
-        labels = []
-        if "cross" in f:
-            labels.append("Cross")
-        if "x" in f:
-            labels.append("X")
+        # filter 키('cross', 'x')를 표준 라벨로 정규화하여 출력
+        labels = sorted({normalize_filter_key(k) for k in f.keys() if normalize_filter_key(k)})
         print(f"√ {key} 필터 로드 완료 ({', '.join(labels) if labels else '라벨 없음'})")
 
     print("\n" + "-" * 40)
@@ -242,8 +256,15 @@ def run_mode2():
             continue
 
         filt_set = filters[filter_key]
-        cross_filter = filt_set.get("cross")
-        x_filter = filt_set.get("x")
+        # filter 키('cross','x', 대소문자 등)를 표준 라벨로 정규화한 뒤 조회
+        normalized_filters = {}
+        for raw_key, matrix in filt_set.items():
+            norm_key = normalize_filter_key(raw_key)
+            if norm_key:
+                normalized_filters[norm_key] = matrix
+
+        cross_filter = normalized_filters.get("Cross")
+        x_filter = normalized_filters.get("X")
         pattern_input = entry.get("input")
 
         if cross_filter is None or x_filter is None or pattern_input is None:
@@ -349,8 +370,10 @@ def print_summary(total, passed, failed, fail_cases):
         print("\n실패 케이스:")
         for case_id, reason in fail_cases:
             print(f" - {case_id}: {reason}")
+    elif total == 0:
+        print("\n분석된 케이스가 없습니다 (data.json 로드 실패 또는 patterns가 비어 있음).")
     else:
-        print("\n실패 케이스 없음 (0 FAIL): 라벨 정규화('t'/'+' -> Cross, 'x' -> X)와")
+        print("\n실패 케이스 없음 (0 FAIL): 라벨 정규화('+' -> Cross, 'x' -> X)와")
         print("epsilon(1e-9) 기반 동점 판정 정책이 모든 케이스에 정상 적용되었습니다.")
 
 
