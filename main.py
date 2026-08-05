@@ -9,6 +9,7 @@ import json
 import time
 import re
 import os
+import statistics
 
 # ------------------------------------------------------------------
 # 전역 설정
@@ -63,6 +64,7 @@ def generate_x(n):
 def mac_operation(pattern, filt):
     """
     입력 패턴과 필터를 위치별로 곱하고 모두 더한다.
+    연산 흐름: 입력(pattern,filt) -> 위치별 곱셈(Multiply) -> 누적 합산(Accumulate) -> 점수 반환
     Multiply(곱하기) + Accumulate(누적 더하기) = MAC 연산
     get_value()로 각 위치의 값을 읽어와 반복문으로 직접 계산한다(외부 라이브러리 미사용).
     """
@@ -85,6 +87,11 @@ def normalize_expected(raw_label):
     (과제 자료 초기 버전에는 '+'가 't'로 잘못 표기되어 있었으나, 최신 요구사항
     문서와 실제 data.json 모두 '+'를 사용함을 확인했다. 하위 호환을 위해
     't'/'true'/'cross' 표기도 함께 Cross로 인식하도록 방어적으로 넓혀두었다.)
+
+    우선순위(충돌 처리): Cross 그룹("+","t","true","cross")과 X 그룹("x")은 서로
+    겹치는 표기가 없어 현재는 충돌이 발생하지 않는다. 만약 향후 두 그룹에 동시에
+    속할 수 있는 표기가 추가된다면, if문 순서상 Cross 그룹이 먼저 검사되므로
+    Cross가 우선 적용된다(첫 매칭 우선).
     """
     if raw_label is None:
         return None
@@ -125,14 +132,16 @@ def read_matrix(label, size):
             parts = line.split()
 
             if len(parts) != size:
-                print(f"입력 형식 오류: 각 줄에 {size}개의 숫자를 공백으로 구분해 입력하세요.")
+                print(f"입력 형식 오류 ({i + 1}번째 줄): 각 줄에 {size}개의 숫자를 "
+                      f"공백으로 구분해 입력하세요. (입력값: {len(parts)}개)")
                 error_occurred = True
                 break
 
             try:
                 values = [float(p) for p in parts]
             except ValueError:
-                print("입력 형식 오류: 숫자로 변환할 수 없는 값이 포함되어 있습니다. 다시 입력하세요.")
+                print(f"입력 형식 오류 ({i + 1}번째 줄): 숫자로 변환할 수 없는 값이 "
+                      f"포함되어 있습니다. 다시 입력하세요.")
                 error_occurred = True
                 break
 
@@ -185,7 +194,7 @@ def run_mode1():
     print(f"B 점수: {score_b}")
     print(f"연산 시간(평균/{PERF_REPEATS}회): {elapsed_ms:.3f} ms")
     if judge == "UNDECIDED":
-        print(f"판정: 판정 불가 (|A-B| < {EPSILON})")
+        print(f"판정: 판정 불가 (|A-B| < {EPSILON}, 부동소수점 오차 허용 범위 내 동점)")
     else:
         print(f"판정: {judge}")
 
@@ -329,30 +338,36 @@ def run_mode2():
 def measure_performance(sizes, repeats=PERF_REPEATS):
     """
     크기별로 십자가 패턴 vs 십자가 필터의 MAC 연산을 repeats회 반복 측정하여
-    평균 시간을 ms 단위로 반환한다. (I/O 시간은 제외하고 연산 함수 호출 구간만 측정)
+    평균 시간(ms)과 표준편차(ms)를 함께 반환한다.
+    (I/O 시간은 제외하고 연산 함수 호출 구간만 측정 / 반복마다 개별 시간을 기록해
+    측정값의 흔들림(신뢰도)까지 표준편차로 보여준다)
     """
     results = []
     for n in sizes:
         pattern = generate_cross(n)
         filt = generate_cross(n)
 
-        start = time.perf_counter()
+        sample_times_ms = []
         for _ in range(repeats):
+            start = time.perf_counter()
             mac_operation(pattern, filt)
-        elapsed_ms = (time.perf_counter() - start) / repeats * 1000
+            sample_times_ms.append((time.perf_counter() - start) * 1000)
 
-        results.append((n, elapsed_ms, n * n))
+        avg_ms = sum(sample_times_ms) / repeats
+        stdev_ms = statistics.stdev(sample_times_ms) if repeats > 1 else 0.0
+
+        results.append((n, avg_ms, stdev_ms, n * n))
     return results
 
 
 def print_performance_table(results):
     print("\n" + "-" * 40)
-    print(f"# [성능 분석] (평균/{PERF_REPEATS}회)")
+    print(f"# [성능 분석] (평균±표준편차 / {PERF_REPEATS}회)")
     print("-" * 40)
-    print(f"{'크기':<10}{'평균 시간(ms)':<16}{'연산 횟수(N^2)'}")
+    print(f"{'크기':<10}{'평균 시간(ms)':<16}{'표준편차(ms)':<14}{'연산 횟수(N^2)'}")
     print("-" * 40)
-    for n, t, ops in results:
-        print(f"{n}x{n:<8}{t:<16.3f}{ops}")
+    for n, avg_ms, stdev_ms, ops in results:
+        print(f"{n}x{n:<8}{avg_ms:<16.4f}{stdev_ms:<14.4f}{ops}")
 
 
 # ------------------------------------------------------------------
