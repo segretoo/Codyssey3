@@ -59,6 +59,62 @@ def generate_x(n):
 
 
 # ------------------------------------------------------------------
+# 1-1. [보너스 ①] 1차원 배열 최적화 버전 (메모리 접근 패턴 단순화)
+# ------------------------------------------------------------------
+# 2차원 리스트(list[list[float]])는 matrix[i][j]에 접근할 때마다
+# 바깥 리스트에서 안쪽 리스트를 한 번 더 찾아가는(포인터 역참조) 과정이 필요하다.
+# 이를 길이 N*N인 1차원 리스트로 펼쳐두고 인덱스 계산(row*n+col)만으로 접근하면
+# 리스트 역참조 한 단계가 줄어들고, 데이터가 메모리에 연속으로 배치되어
+# 접근 지역성(locality)도 좋아진다.
+def create_matrix_1d(n, fill=0.0):
+    """길이 N*N인 1차원 배열을 생성한다 (2차원 NxN 배열의 평면화 버전)."""
+    return [fill for _ in range(n * n)]
+
+
+def set_value_1d(flat, row, col, n, value):
+    """1차원 배열에서 (row, col) 위치에 값을 저장한다. 인덱스 = row*n + col."""
+    flat[row * n + col] = value
+
+
+def get_value_1d(flat, row, col, n):
+    """1차원 배열에서 (row, col) 위치의 값을 읽어온다. 인덱스 = row*n + col."""
+    return flat[row * n + col]
+
+
+def to_1d(matrix):
+    """2차원 배열을 1차원 배열로 변환한다 (row-major 순서로 펼침)."""
+    n = len(matrix)
+    flat = create_matrix_1d(n)
+    for i in range(n):
+        for j in range(n):
+            set_value_1d(flat, i, j, n, get_value(matrix, i, j))
+    return flat
+
+
+def generate_cross_1d(n):
+    """NxN 십자가(+) 패턴을 1차원 배열로 바로 생성한다."""
+    flat = create_matrix_1d(n)
+    mid = n // 2
+    for i in range(n):
+        set_value_1d(flat, i, mid, n, 1.0)
+        set_value_1d(flat, mid, i, n, 1.0)
+    return flat
+
+
+def mac_operation_1d(pattern_flat, filt_flat):
+    """
+    1차원 배열 버전 MAC 연산. 2차원 인덱싱(matrix[i][j]) 없이 단일 for문으로
+    같은 위치(같은 인덱스)의 값을 곱해 누적 합산한다. 2차원 버전과 결과값은
+    수학적으로 동일해야 하며, 접근 방식(메모리 패턴)만 다르다.
+    """
+    total = 0.0
+    length = len(pattern_flat)
+    for idx in range(length):
+        total += pattern_flat[idx] * filt_flat[idx]
+    return total
+
+
+# ------------------------------------------------------------------
 # 2. MAC 연산 (반복문으로 직접 구현, 외부 라이브러리 금지)
 # ------------------------------------------------------------------
 def mac_operation(pattern, filt):
@@ -162,18 +218,45 @@ def judge_scores(score_a, score_b):
     return "A" if score_a > score_b else "B"
 
 
+# ---- [보너스 ②] 패턴 생성기를 모드 1에서 재활용 ----
+def choose_matrix(label, size):
+    """
+    사용자가 직접 입력하거나, generate_cross()/generate_x()로 자동 생성된
+    패턴을 선택할 수 있게 한다. (보너스 과제: 패턴 생성기를 모드 1에서 재활용)
+    """
+    while True:
+        print(f"\n{label} 입력 방식을 선택하세요.")
+        print(f"1. 직접 입력 ({size}줄, 공백 구분)")
+        print(f"2. 십자가(Cross) 패턴 자동 생성 ({size}x{size})")
+        print(f"3. X 패턴 자동 생성 ({size}x{size})")
+        choice = input("선택: ").strip()
+
+        if choice == "1":
+            return read_matrix(label, size)
+        elif choice == "2":
+            matrix = generate_cross(size)
+            print(f"→ {label}: {size}x{size} 십자가 패턴을 자동 생성했습니다.")
+            return matrix
+        elif choice == "3":
+            matrix = generate_x(size)
+            print(f"→ {label}: {size}x{size} X 패턴을 자동 생성했습니다.")
+            return matrix
+        else:
+            print("1, 2, 3 중 하나를 입력해 주세요.")
+
+
 def run_mode1():
     print("\n" + "-" * 40)
     print("# [1] 필터 입력")
     print("-" * 40)
-    filter_a = read_matrix("필터 A", 3)
-    filter_b = read_matrix("필터 B", 3)
+    filter_a = choose_matrix("필터 A", 3)
+    filter_b = choose_matrix("필터 B", 3)
     print("\n필터 A, B 저장 완료.")
 
     print("\n" + "-" * 40)
     print("# [2] 패턴 입력")
     print("-" * 40)
-    pattern = read_matrix("패턴", 3)
+    pattern = choose_matrix("패턴", 3)
 
     # MAC 연산 + 시간 측정 (평균/10회)
     start = time.perf_counter()
@@ -367,7 +450,65 @@ def print_performance_table(results):
     print(f"{'크기':<10}{'평균 시간(ms)':<16}{'표준편차(ms)':<14}{'연산 횟수(N^2)'}")
     print("-" * 40)
     for n, avg_ms, stdev_ms, ops in results:
-        print(f"{n}x{n:<8}{avg_ms:<16.4f}{stdev_ms:<14.4f}{ops}")
+        size_str = f"{n}x{n}"
+        print(f"{size_str:<10}{avg_ms:<16.4f}{stdev_ms:<14.4f}{ops}")
+
+
+# ------------------------------------------------------------------
+# 6-1. [보너스 ①] 2D vs 1D 최적화 전/후 성능 비교
+# ------------------------------------------------------------------
+def measure_performance_1d(sizes, repeats=PERF_REPEATS):
+    """
+    1차원 배열 버전 MAC 연산을 크기별로 repeats회 반복 측정한다.
+    measure_performance()와 동일한 입력(십자가 패턴/필터)·동일한 반복 횟수를
+    사용해 2D 버전과 공정하게 비교할 수 있도록 한다.
+    """
+    results = []
+    for n in sizes:
+        pattern_flat = generate_cross_1d(n)
+        filt_flat = generate_cross_1d(n)
+
+        sample_times_ms = []
+        for _ in range(repeats):
+            start = time.perf_counter()
+            mac_operation_1d(pattern_flat, filt_flat)
+            sample_times_ms.append((time.perf_counter() - start) * 1000)
+
+        avg_ms = sum(sample_times_ms) / repeats
+        stdev_ms = statistics.stdev(sample_times_ms) if repeats > 1 else 0.0
+
+        results.append((n, avg_ms, stdev_ms, n * n))
+    return results
+
+
+def print_optimization_comparison(sizes, repeats=PERF_REPEATS, results_2d=None):
+    """
+    [보너스 ①] 2차원 배열(matrix[i][j]) 방식과 1차원 배열(flat[i*n+j]) 방식의
+    MAC 연산 성능을 동일한 입력·동일한 반복 횟수로 측정해 나란히 비교 출력한다.
+    results_2d를 미리 전달하면 2D 쪽은 다시 측정하지 않고 재사용한다(중복 측정 방지).
+    """
+    if results_2d is None:
+        results_2d = measure_performance(sizes, repeats)
+    results_1d = measure_performance_1d(sizes, repeats)
+
+    print("\n" + "-" * 60)
+    print(f"# [보너스] 2D vs 1D 배열 최적화 성능 비교 (평균/{repeats}회)")
+    print("-" * 60)
+    print(f"{'크기':<8}{'2D 평균(ms)':<14}{'1D 평균(ms)':<14}{'개선율':<10}{'연산 횟수'}")
+    print("-" * 60)
+    for (n, avg_2d, _, ops), (_, avg_1d, _, _) in zip(results_2d, results_1d):
+        if avg_2d > 0:
+            improvement = (avg_2d - avg_1d) / avg_2d * 100
+        else:
+            improvement = 0.0
+        sign = "+" if improvement >= 0 else ""
+        improvement_str = f"{sign}{improvement:.1f}%"
+        size_str = f"{n}x{n}"
+        print(f"{size_str:<8}{avg_2d:<14.4f}{avg_1d:<14.4f}{improvement_str:<10}{ops}")
+    print("-" * 60)
+    print("(개선율 = (2D시간 - 1D시간) / 2D시간 * 100. 양수면 1D가 더 빠름을 의미)")
+    print("(측정값은 매 실행마다 시스템 부하에 따라 흔들릴 수 있으며, 두 방식")
+    print(" 모두 알고리즘 자체의 복잡도는 동일한 O(N^2)이라 개선폭은 제한적일 수 있음)")
 
 
 # ------------------------------------------------------------------
@@ -414,11 +555,13 @@ def main():
         run_mode1()
         perf_results = measure_performance(PERF_SIZES)
         print_performance_table(perf_results)
+        print_optimization_comparison(PERF_SIZES, results_2d=perf_results)
         # 모드 1은 expected 값이 없으므로 PASS/FAIL 집계 대상이 아님
     else:
         total, passed, failed, fail_cases = run_mode2()
         perf_results = measure_performance(PERF_SIZES)
         print_performance_table(perf_results)
+        print_optimization_comparison(PERF_SIZES, results_2d=perf_results)
         print_summary(total, passed, failed, fail_cases)
 
 
