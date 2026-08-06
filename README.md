@@ -1,4 +1,4 @@
-# Mini NPU Simulator
+# 💻 Mini NPU Simulator
 
 MAC(Multiply-Accumulate) 연산의 핵심 원리를 직접 구현한 Python 콘솔 애플리케이션입니다.
 외부 라이브러리(NumPy 등) 없이, 표준 라이브러리(`json`, `time`, `re`, `os`)만 사용합니다.
