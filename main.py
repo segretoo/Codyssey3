@@ -418,6 +418,33 @@ def run_mode2():
 # ------------------------------------------------------------------
 # 6. 성능 분석 (크기별 MAC 연산 시간 측정)
 # ------------------------------------------------------------------
+def prompt_custom_size(existing_sizes):
+    """
+    [보너스②] 사용자로부터 성능 분석에 포함할 크기 N을 직접 입력받는다.
+    "크기 N 입력 시, NxN 십자가/X 패턴을 자동 생성한다"는 요구사항을 실제
+    대화형 입력으로 만족시킨다. 입력한 N은 generate_cross(n)에 그대로 전달되어
+    성능 분석(measure_performance)에 재활용된다. 빈 입력이면 건너뛴다.
+    """
+    raw = input(
+        "\n성능 분석에 포함할 추가 크기(N)를 입력하세요 (예: 10, 없으면 Enter): "
+    ).strip()
+    if not raw:
+        return None
+    try:
+        n = int(raw)
+    except ValueError:
+        print(f"→ 숫자가 아니라서 건너뜁니다: '{raw}'")
+        return None
+    if n <= 0:
+        print(f"→ 1 이상의 정수만 가능합니다: {n}")
+        return None
+    if n in existing_sizes:
+        print(f"→ {n}x{n}은 이미 기본 목록에 있어서 건너뜁니다.")
+        return None
+    print(f"→ {n}x{n} 십자가 패턴을 자동 생성해 성능 분석에 추가합니다.")
+    return n
+
+
 def measure_performance(sizes, repeats=PERF_REPEATS):
     """
     크기별로 십자가 패턴 vs 십자가 필터의 MAC 연산을 repeats회 반복 측정하여
@@ -551,17 +578,20 @@ def main():
     total = passed = failed = 0
     fail_cases = []
 
+    custom_n = prompt_custom_size(PERF_SIZES)
+    perf_sizes = PERF_SIZES + [custom_n] if custom_n else PERF_SIZES
+
     if choice == "1":
         run_mode1()
-        perf_results = measure_performance(PERF_SIZES)
+        perf_results = measure_performance(perf_sizes)
         print_performance_table(perf_results)
-        print_optimization_comparison(PERF_SIZES, results_2d=perf_results)
+        print_optimization_comparison(perf_sizes, results_2d=perf_results)
         # 모드 1은 expected 값이 없으므로 PASS/FAIL 집계 대상이 아님
     else:
         total, passed, failed, fail_cases = run_mode2()
-        perf_results = measure_performance(PERF_SIZES)
+        perf_results = measure_performance(perf_sizes)
         print_performance_table(perf_results)
-        print_optimization_comparison(PERF_SIZES, results_2d=perf_results)
+        print_optimization_comparison(perf_sizes, results_2d=perf_results)
         print_summary(total, passed, failed, fail_cases)
 
 
